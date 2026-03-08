@@ -44,17 +44,13 @@ const formatSeconds = (seconds) => new Date(seconds * 1000).toISOString().substr
  */
 
 const removeBG = async (input) => {
-    try {
-        const response = await removeBackgroundFromImageBase64({
-            base64img: input.toString('base64'),
-            apiKey: process.env.BG_API_KEY,
-            size: 'auto',
-            type: 'auto'
-        })
-        return Buffer.from(response.base64img, 'base64')
-    } catch (error) {
-        throw error
-    }
+    const response = await removeBackgroundFromImageBase64({
+        base64img: input.toString('base64'),
+        apiKey: process.env.BG_API_KEY,
+        size: 'auto',
+        type: 'auto'
+    })
+    return Buffer.from(response.base64img, 'base64')
 }
 
 /**
@@ -128,11 +124,18 @@ const fetch = async (url) => (await axios.get(url)).data
 
 const webpToPng = async (webp) => {
     const filename = `${tmpdir()}/${Math.random().toString(36)}`
-    await writeFile(`${filename}.webp`, webp)
-    await execute(`dwebp "${filename}.webp" -o "${filename}.png"`)
-    const buffer = await readFile(`${filename}.png`)
-    Promise.all([unlink(`${filename}.png`), unlink(`${filename}.webp`)])
-    return buffer
+    try {
+        await writeFile(`${filename}.webp`, webp)
+        await execute(`dwebp "${filename}.webp" -o "${filename}.png"`)
+        const buffer = await readFile(`${filename}.png`)
+        // Cleanup temp files
+        await Promise.all([unlink(`${filename}.png`), unlink(`${filename}.webp`)]).catch(() => {})
+        return buffer
+    } catch (error) {
+        // Cleanup on error
+        await Promise.all([unlink(`${filename}.png`), unlink(`${filename}.webp`)]).catch(() => {})
+        throw error
+    }
 }
 
 /**
@@ -146,7 +149,7 @@ const webpToMp4 = async (webp) => {
             headers: { 'Content-Type': `multipart/form-data; boundary=${form._boundary}` }
         })
     }
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
         const form = new FormData()
         form.append('new-image-url', '')
         form.append('new-image', webp, { filename: 'blob' })
@@ -179,16 +182,26 @@ const webpToMp4 = async (webp) => {
 
 const gifToMp4 = async (gif, write = false) => {
     const filename = `${tmpdir()}/${Math.random().toString(36)}`
-    await writeFile(`${filename}.gif`, gif)
-    await execute(
-        `ffmpeg -f gif -i ${filename}.gif -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" ${filename}.mp4`
-    )
-    if (write) return `${filename}.mp4`
-    const buffer = await readFile(`${filename}.mp4`)
-    Promise.all([unlink(`${filename}.gif`), unlink(`${filename}.mp4`)])
-    return buffer
+    try {
+        await writeFile(`${filename}.gif`, gif)
+        await execute(
+            `ffmpeg -f gif -i "${filename}.gif" -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "${filename}.mp4"`
+        )
+        if (write) return `${filename}.mp4`
+        const buffer = await readFile(`${filename}.mp4`)
+        // Cleanup temp files
+        await Promise.all([unlink(`${filename}.gif`), unlink(`${filename}.mp4`)]).catch(() => {})
+        return buffer
+    } catch (error) {
+        // Cleanup on error
+        await Promise.all([unlink(`${filename}.gif`), unlink(`${filename}.mp4`)]).catch(() => {})
+        throw error
+    }
 }
 
+/**
+ * Execute shell commands with promisified exec
+ */
 const execute = promisify(exec)
 
 const getRandomItem = (array) => array[Math.floor(Math.random() * array.length)]
@@ -202,27 +215,32 @@ const formatSize = sizeFormatter({
     render: (literal, symbol) => `${literal} ${symbol}B`
 })
 
+/**
+ * Execute terminal command
+ * @param {string} param - Command to execute
+ * @returns {Promise<string>}
+ */
 const term = (param) =>
     new Promise((resolve, reject) => {
         console.log('Run terminal =>', param)
         exec(param, (error, stdout, stderr) => {
             if (error) {
                 console.log(error.message)
-                resolve(error.message)
-            }
-            if (stderr) {
+                reject(error)
+            } else if (stderr) {
                 console.log(stderr)
                 resolve(stderr)
+            } else {
+                console.log(stdout)
+                resolve(stdout)
             }
-            console.log(stdout)
-            resolve(stdout)
         })
     })
 
 const restart = () => {
     exec('pm2 start src/krypton.js', (err, stdout, stderr) => {
         if (err) {
-            console.log(err)
+            console.error('Restart error:', err)
             return
         }
         console.log(`stdout: ${stdout}`)

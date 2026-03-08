@@ -23,134 +23,209 @@ const { readdirSync, remove } = require('fs-extra')
 const port = process.env.PORT || 3000
 const driver = new MongoDriver(process.env.URL)
 
+/**
+ * Initialize and start the Krypton WhatsApp bot
+ * Handles QR code authentication, session management, and connection lifecycle
+ * @async
+ * @returns {Promise<void>}
+ */
 const start = async () => {
-    const { state, saveCreds } = await useMultiFileAuthState('session')
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState('session')
 
-    const client = Baileys({
-        version: (await fetchLatestBaileysVersion()).version,
-        auth: state,
-        logger: P({ level: 'silent' }),
-        browser: ['krypton-WhatsappBot', 'silent', '4.0.0'],
-        printQRInTerminal: true
-    })
+        const client = Baileys({
+            version: (await fetchLatestBaileysVersion()).version,
+            auth: state,
+            logger: P({ level: 'silent' }),
+            browser: ['krypton-WhatsappBot', 'silent', '4.0.0'],
+            printQRInTerminal: true,
+            markOnlineOnConnect: true,
+            syncFullHistory: false,
+            retryRequestDelayMs: 10,
+            maxMsgsInMemory: 100
+        })
 
-    //Config
-    client.config = getConfig()
+        //Config
+        client.config = getConfig()
 
-    //Database
-    client.DB = new QuickDB({
-        driver
-    })
-    //Tables
-    client.contactDB = client.DB.table('contacts')
+        //Database
+        client.DB = new QuickDB({
+            driver
+        })
+        //Tables
+        client.contactDB = client.DB.table('contacts')
 
-    //Contacts
-    client.contact = contact
+        //Contacts
+        client.contact = contact
 
-    //Open AI
-    client.AI = openai
+        //Open AI
+        client.AI = openai
 
-    //Experience
-    client.exp = client.DB.table('experience')
+        //Experience
+        client.exp = client.DB.table('experience')
 
-    //Commands
-    client.cmd = new Collection()
+        //Commands
+        client.cmd = new Collection()
 
-    //Utils
-    client.utils = utils
+        //Utils
+        client.utils = utils
 
-    client.messagesMap = new Map()
+        client.messagesMap = new Map()
 
-    /**
-     * @returns {Promise<string[]>}
-     */
+        /**
+         * @returns {Promise<string[]>}
+         */
 
-    client.getAllGroups = async () => Object.keys(await client.groupFetchAllParticipating())
+        client.getAllGroups = async () => Object.keys(await client.groupFetchAllParticipating())
 
-    /**
-     * @returns {Promise<string[]>}
-     */
+        /**
+         * @returns {Promise<string[]>}
+         */
 
-    client.getAllUsers = async () => {
-        const data = (await client.contactDB.all()).map((x) => x.id)
-        const users = data.filter((element) => /^\d+@s$/.test(element)).map((element) => `${element}.whatsapp.net`)
-        return users
-    }
+        client.getAllUsers = async () => {
+            const data = (await client.contactDB.all()).map((x) => x.id)
+            const users = data.filter((element) => /^\d+@s$/.test(element)).map((element) => `${element}.whatsapp.net`)
+            return users
+        }
 
-    //Colourful
-    client.log = (text, color = 'green') =>
-        color ? console.log(chalk.keyword(color)(text)) : console.log(chalk.green(text))
+        //Colourful
+        client.log = (text, color = 'green') =>
+            color ? console.log(chalk.keyword(color)(text)) : console.log(chalk.green(text))
 
-    //Command Loader
-    const loadCommands = async () => {
-        const readCommand = (rootDir) => {
-            readdirSync(rootDir).forEach(($dir) => {
-                const commandFiles = readdirSync(join(rootDir, $dir)).filter((file) => file.endsWith('.js'))
-                for (let file of commandFiles) {
-                    const cmd = require(join(rootDir, $dir, file))
-                    client.cmd.set(cmd.command.name, cmd)
-                    client.log(`Loaded: ${cmd.command.name.toUpperCase()} from ${file}`)
+        //Command Loader
+        const loadCommands = async () => {
+            const readCommand = (rootDir) => {
+                try {
+                    readdirSync(rootDir).forEach(($dir) => {
+                        const commandFiles = readdirSync(join(rootDir, $dir)).filter((file) => file.endsWith('.js'))
+                        for (let file of commandFiles) {
+                            try {
+                                const cmd = require(join(rootDir, $dir, file))
+                                client.cmd.set(cmd.command.name, cmd)
+                                client.log(`Loaded: ${cmd.command.name.toUpperCase()} from ${file}`)
+                            } catch (cmdErr) {
+                                client.log(`Failed to load command ${file}: ${cmdErr.message}`, 'red')
+                            }
+                        }
+                    })
+                    client.log('Successfully Loaded Commands', 'green')
+                } catch (err) {
+                    client.log(`Error loading commands: ${err.message}`, 'red')
                 }
-            })
-            client.log('Successfully Loaded Commands')
-        }
-        readCommand(join(__dirname, '.', 'Commands'))
-    }
-
-    //connection updates
-    client.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update
-        if (update.qr) {
-            client.log(`[${chalk.red('!')}]`, 'white')
-            client.log(`Scan the QR code above | You can also authenicate in http://localhost:${port}`, 'blue')
-            client.QR = imageSync(update.qr)
-        }
-        if (connection === 'close') {
-            const { statusCode } = new Boom(lastDisconnect?.error).output
-            if (statusCode !== DisconnectReason.loggedOut) {
-                console.log('Connecting...')
-                setTimeout(() => start(), 3000)
-            } else {
-                client.log('Disconnected.', 'red')
-                await remove('session')
-                console.log('Starting...')
-                setTimeout(() => start(), 3000)
             }
+            readCommand(join(__dirname, '.', 'Commands'))
         }
-        if (connection === 'connecting') {
-            client.state = 'connecting'
-            console.log('Connecting to WhatsApp...')
-        }
-        if (connection === 'open') {
-            client.state = 'open'
-            loadCommands()
-            client.log('Connected to WhatsApp')
-            client.log('Total Mods: ' + client.config.mods.length)
-        }
-    })
 
-    app.get('/', (req, res) => {
-        res.status(200).setHeader('Content-Type', 'image/png').send(client.QR)
-    })
+        /**
+         * Handle connection updates with exponential backoff and graceful reconnection
+         * Preserves QR code flow and session-based authentication
+         */
+        let reconnectAttempts = 0
+        const maxReconnectAttempts = 5
+        const baseReconnectDelay = 3000
 
-    client.ev.on('messages.upsert', async (messages) => await MessageHandler(messages, client))
+        client.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update
 
-    client.ev.on('group-participants.update', async (event) => await EventsHandler(event, client))
+            // QR Code Display for first-time authentication
+            if (qr) {
+                reconnectAttempts = 0
+                client.log(`[${chalk.red('!')}]`, 'white')
+                client.log(`Scan the QR code above | You can also authenticate in http://localhost:${port}`, 'blue')
+                client.QR = imageSync(qr)
+            }
 
-    client.ev.on('contacts.update', async (update) => await contact.saveContacts(update, client))
+            // Handle connection close with exponential backoff
+            if (connection === 'close') {
+                const { statusCode } = new Boom(lastDisconnect?.error).output
 
-    client.ev.on('creds.update', saveCreds)
-    return client
+                // Logged out - clear session and restart
+                if (statusCode === DisconnectReason.loggedOut) {
+                    client.log('Logged out. Clearing session...', 'red')
+                    await remove('session')
+                    setTimeout(() => start(), baseReconnectDelay)
+                }
+                // Restart required - reconnect immediately
+                else if (statusCode === DisconnectReason.restartRequired) {
+                    client.log('Restart required. Reconnecting...', 'yellow')
+                    reconnectAttempts = 0
+                    setTimeout(() => start(), 1000)
+                }
+                // Other disconnections - exponential backoff
+                else if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts)
+                    client.log(`Reconnecting... (Attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`, 'yellow')
+                    reconnectAttempts++
+                    setTimeout(() => start(), delay)
+                } else {
+                    client.log('Max reconnection attempts reached. Please restart the bot.', 'red')
+                }
+            }
+
+            // Connecting state
+            if (connection === 'connecting') {
+                client.state = 'connecting'
+                client.log('Connecting to WhatsApp...', 'yellow')
+            }
+
+            // Connected and ready
+            if (connection === 'open') {
+                client.state = 'open'
+                reconnectAttempts = 0
+                loadCommands()
+                client.log('Connected to WhatsApp', 'green')
+                client.log('Total Mods: ' + client.config.mods.length, 'green')
+            }
+        })
+
+        app.get('/', (req, res) => {
+            res.status(200).setHeader('Content-Type', 'image/png').send(client.QR)
+        })
+
+        client.ev.on('messages.upsert', async (messages) => await MessageHandler(messages, client))
+
+        client.ev.on('group-participants.update', async (event) => await EventsHandler(event, client))
+
+        client.ev.on('contacts.update', async (update) => await contact.saveContacts(update, client))
+
+        // Save credentials on update (session persistence)
+        client.ev.on('creds.update', saveCreds)
+
+        return client
+    } catch (error) {
+        console.error('Error starting bot:', error)
+        setTimeout(() => start(), 5000)
+    }
 }
 
-if (!process.env.URL) return console.error('You have not provided any MongoDB URL!!')
+/**
+ * Global error handlers for unhandled rejections and exceptions
+ */
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+})
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error)
+    process.exit(1)
+})
+
+// Database connection and bot startup
+if (!process.env.URL) {
+    console.error('❌ You have not provided any MongoDB URL!!')
+    process.exit(1)
+}
+
 driver
     .connect()
     .then(() => {
-        console.log(`Connected to the database!`)
-        // Starts the script if gets a success in connecting with Database
+        console.log('✅ Connected to the database!')
+        // Start the bot after successful database connection
         start()
     })
-    .catch((err) => console.error(err))
+    .catch((err) => {
+        console.error('❌ Database connection error:', err)
+        process.exit(1)
+    })
 
-app.listen(port, () => console.log(`Server started on PORT : ${port}`))
+app.listen(port, () => console.log(`✅ Server started on PORT : ${port}`))

@@ -2,7 +2,6 @@ const ytdl = require('youtubedl-core')
 const { validateURL, getInfo } = require('youtubedl-core')
 const { createWriteStream, readFile } = require('fs-extra')
 const { tmpdir } = require('os')
-const axios = require('axios')
 const crypto = require('crypto')
 
 // Generating a random file name
@@ -12,28 +11,61 @@ const generateRandomFilename = (length) =>
         .toString('hex')
         .slice(0, length)
 
-//Downloading the video or audio file and returning it as a buffer
-const getBuffer = (url, type) => {
-    const filename = `${tmpdir()}/${generateRandomFilename(12)}.${type === 'audio' ? 'mp3' : 'mp4'}` // generate a random file name
+/**
+ * Download video or audio from YouTube and return as buffer
+ * @async
+ * @param {string} url - YouTube URL
+ * @param {string} type - 'audio' or 'video'
+ * @returns {Promise<Buffer>}
+ */
+const getBuffer = async (url, type) => {
+    const filename = `${tmpdir()}/${generateRandomFilename(12)}.${type === 'audio' ? 'mp3' : 'mp4'}`
     const stream = createWriteStream(filename)
-    ytdl(
-        url,
-        { filter: type === 'audio' ? 'audioonly' : 'videoandaudio' },
-        { quality: type === 'audio' ? 'highestaudio' : 'highest' }
-    ).pipe(stream) // Download the video or audio and pipe it to the write stream
+    
     return new Promise((resolve, reject) => {
-        stream.on('finish', () => {
-            readFile(filename).then(resolve).catch(reject)
-        })
-        stream.on('error', reject) // if there is an error with the write stream, reject the promise with the error
+        try {
+            ytdl(
+                url,
+                { filter: type === 'audio' ? 'audioonly' : 'videoandaudio' },
+                { quality: type === 'audio' ? 'highestaudio' : 'highest' }
+            ).pipe(stream)
+            
+            stream.on('finish', async () => {
+                try {
+                    const buffer = await readFile(filename)
+                    // Cleanup temp file
+                    require('fs-extra').unlink(filename).catch(() => {})
+                    resolve(buffer)
+                } catch (error) {
+                    reject(error)
+                }
+            })
+            
+            stream.on('error', (error) => {
+                // Cleanup on error
+                require('fs-extra').unlink(filename).catch(() => {})
+                reject(error)
+            })
+        } catch (error) {
+            reject(error)
+        }
     })
 }
 
-// parsing the video ID from a YouTube video URL
+/**
+ * Parse video ID from YouTube URL
+ * @param {string} url - YouTube URL
+ * @returns {string} Video ID
+ */
 const parseId = (url) => {
-    const split = url.split('/')
-    if (url.includes('youtu.be')) return split[split.length - 1]
-    return url.split('=')[1]
+    try {
+        const split = url.split('/')
+        if (url.includes('youtu.be')) return split[split.length - 1]
+        return url.split('=')[1]
+    } catch (error) {
+        console.error('Error parsing YouTube URL:', error)
+        throw error
+    }
 }
 
 module.exports = {
