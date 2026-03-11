@@ -19,8 +19,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install dependencies with legacy peer deps flag to handle ESLint peer dependency conflicts
+RUN npm ci --legacy-peer-deps
 
 # Copy application code
 COPY . .
@@ -30,7 +30,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
 
 # Start application with PM2
 CMD ["pm2-runtime", "start", "ecosystem.config.js"]
