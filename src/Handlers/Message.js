@@ -1,7 +1,8 @@
-const { serialize } = require('../Helper/WAclient')
-const { getStats } = require('../Library/stats')
-const chalk = require('chalk')
-const axios = require('axios')
+const { serialize } = require("../Helper/WAclient")
+const { getStats } = require("../Library/stats")
+const { addKryptonite } = require("../Library/Economy")
+const chalk = require("chalk")
+const axios = require("axios")
 
 /**
  * Main message handler with error isolation and rate-limiting
@@ -192,7 +193,9 @@ const experience = async (client, sender, M, from, cmd) => {
         const { requiredXpToLevelUp } = getStats(level)
         if (requiredXpToLevelUp > experience) return null
         await client.DB.add(`${sender}_LEVEL`, 1)
-        await M.reply(` 🎉 *_You Leveled Up_*\n\n _*${M.pushName}*_ Level up 🆙 *_${level} ==> ${level + 1}_*`)
+        const reward = (level + 1) * 100; // Example: 100 Kryptonite per level
+        await addKryptonite(sender, reward);
+        await M.reply(` 🎉 *_You Leveled Up!_*\n\n _*${M.pushName}*_ Level up 🆙 *_${level} ==> ${level + 1}_*\n_You received ${reward} Kryptonite as a reward!_`)
     } catch (error) {
         console.error('Experience error:', error.message)
     }

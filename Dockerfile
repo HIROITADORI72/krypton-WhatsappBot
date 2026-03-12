@@ -8,10 +8,11 @@ RUN apt-get update && \
     imagemagick \
     webp \
     ca-certificates && \
-    apt-get upgrade -y && \
-    npm install -g pm2 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install global npm packages
+RUN npm install -g pm2
 
 # Set working directory
 WORKDIR /app
@@ -30,7 +31,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
+    CMD node -e "require(\'http\').get(\'http://localhost:3000/health\', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
 
 # Start application with PM2
 CMD ["pm2-runtime", "start", "ecosystem.config.js"]

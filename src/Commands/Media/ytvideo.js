@@ -29,24 +29,23 @@ module.exports.execute = async (client, flag, arg, M) => {
         }
     )
     if (Number(videoDetails.lengthSeconds) > 1800) return M.reply('Cannot download video longer than 30 minutes')
-    const audio = YT.getBuffer(term, 'video')
-        .then(async (res) => {
-            await client.sendMessage(
-                M.from,
-                {
-                    document: res,
-                    mimetype: 'video/mp4',
-                    fileName: videoDetails.title + '.mp4'
-                },
-                {
-                    quoted: M
-                }
-            )
-        })
-        .catch((err) => {
-            return M.reply(err.toString())
-            client.log(err, 'red')
-        })
+    try {
+        const videoBuffer = await YT.getBuffer(term, 'video')
+        await client.sendMessage(
+            M.from,
+            {
+                document: videoBuffer,
+                mimetype: 'video/mp4',
+                fileName: videoDetails.title + '.mp4'
+            },
+            {
+                quoted: M
+            }
+        )
+    } catch (err) {
+        client.log(`YouTube Video Download Error: ${err.message}`, 'red')
+        M.reply(`❌ *Error downloading video: ${err.message}*`)
+    }
 }
 
 module.exports.command = {

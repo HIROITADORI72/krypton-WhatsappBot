@@ -3,28 +3,27 @@ const {
     DisconnectReason,
     useMultiFileAuthState,
     fetchLatestBaileysVersion
-} = require('@whiskeysockets/baileys')
-const { QuickDB } = require('quick.db')
-const { getConfig } = require('./getConfig')
-const { MongoDriver } = require('quickmongo')
-const { Collection } = require('discord.js')
-const MessageHandler = require('./Handlers/Message')
-const EventsHandler = require('./Handlers/Events')
-const contact = require('./Helper/contacts')
-const utils = require('./Helper/function')
-const openai = require('./Library/AI_lib')
-const app = require('express')()
-const chalk = require('chalk')
-const P = require('pino')
-const { Boom } = require('@hapi/boom')
-const { join } = require('path')
-const { imageSync } = require('qr-image')
-const { readdirSync, remove } = require('fs-extra')
-const port = process.env.PORT || 3000
-const driver = new MongoDriver(process.env.URL)
+} = require("@whiskeysockets/baileys");
+const { QuickDB } = require("quick.db");
+const { getConfig } = require("./getConfig");
+const { MongoDriver } = require("quickmongo");
+const { Collection } = require("discord.js");
+const MessageHandler = require("./Handlers/Message");
+const EventsHandler = require("./Handlers/Events");
+const contact = require("./Helper/contacts");
+const utils = require("./Helper/function");
+const openai = require("./Library/AI_lib");
+const { initEconomyDB } = require("./Library/Economy");
+const app = require("express")();
+const chalk = require("chalk");
+const P = require("pino");
+const { Boom } = require("@hapi/boom");
+const { join } = require("path");
+const { imageSync } = require("qr-image");
+const { readdirSync, remove } = require("fs-extra");
+const port = process.env.PORT || 3000;
+const driver = new MongoDriver(process.env.URL);
 
-/**
- * Initialize and start the Krypton WhatsApp bot
  * Handles QR code authentication, session management, and connection lifecycle
  * @async
  * @returns {Promise<void>}
@@ -53,7 +52,10 @@ const start = async () => {
             driver
         })
         //Tables
-        client.contactDB = client.DB.table('contacts')
+        client.contactDB = client.DB.table("contacts")
+
+        //Economy
+        await initEconomyDB(process.env.URL);
 
         //Contacts
         client.contact = contact
