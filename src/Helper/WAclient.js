@@ -120,11 +120,12 @@ function serialize(M, client) {
             (M.type === 'buttonsResponseMessage' && M.message?.[M.type]?.selectedButtonId) ||
             (M.type === 'templateButtonReplyMessage' && M.message?.[M.type]?.selectedId) ||
             ''
-        M.reply = (text) =>
+        M.reply = (text, options = {}) =>
             client.sendMessage(
                 M.from,
                 {
-                    text
+                    text,
+                    ...options
                 },
                 {
                     quoted: M

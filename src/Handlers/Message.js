@@ -27,8 +27,8 @@ const MessageHandler = async (messages, client) => {
         const gcMeta = isGroup ? await client.groupMetadata(from) : ''
         const gcName = isGroup ? gcMeta.subject : ''
         const isCmd = body.startsWith(client.config.prefix)
-        const [cmdName, ...args] = body.replace(client.config.prefix, '').split(' ')
-        const arg = args.filter((x) => !x.startsWith('--')).join(' ')
+        const [cmdName, ...args] = body.replace(client.config.prefix, '').trim().split(' ')
+        const arg = args.filter((x) => !x.startsWith('--')).join(' ').trim()
         const flag = args.filter((arg) => arg.startsWith('--'))
         const groupMembers = gcMeta?.participants || []
         const groupAdmins = groupMembers.filter((v) => v.admin).map((v) => v.id)
@@ -56,9 +56,16 @@ const MessageHandler = async (messages, client) => {
         )
 
         if (!isCmd) return
+        
+        // Find command by name or alias (case-insensitive)
+        const lowerCmdName = cmdName.toLowerCase()
         const command =
-            client.cmd.get(cmdName) ||
-            client.cmd.find((cmd) => cmd.command.aliases && cmd.command.aliases.includes(cmdName))
+            client.cmd.get(lowerCmdName) ||
+            client.cmd.find((cmd) => {
+                if (cmd.command.name.toLowerCase() === lowerCmdName) return true
+                if (cmd.command.aliases && cmd.command.aliases.some(alias => alias.toLowerCase() === lowerCmdName)) return true
+                return false
+            })
 
         if (!command) return M.reply(`💔 *No such command found!!*`)
         if (!groupAdmins.includes(sender) && command.command.category == 'moderation')
