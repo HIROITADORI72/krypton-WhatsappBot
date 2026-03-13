@@ -87,9 +87,16 @@ const start = async () => {
          */
 
         client.getAllUsers = async () => {
-            const data = (await client.contactDB.all()).map((x) => x.id)
-            const users = data.filter((element) => /^\d+@s$/.test(element)).map((element) => `${element}.whatsapp.net`)
-            return users
+            try {
+                const allContacts = await client.contactDB.all()
+                if (!allContacts || allContacts.length === 0) return []
+                const data = allContacts.map((x) => x.id).filter(Boolean)
+                const users = data.filter((element) => /^\d+@s$/.test(element)).map((element) => `${element}.whatsapp.net`)
+                return users
+            } catch (error) {
+                console.error('Error getting all users:', error)
+                return []
+            }
         }
 
         //Colourful

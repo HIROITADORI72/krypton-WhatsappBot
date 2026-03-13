@@ -20,6 +20,10 @@ const MessageHandler = async (messages, client) => {
             return
 
         const { isGroup, sender, from, body } = M
+        
+        // Handle undefined body
+        if (!body || typeof body !== 'string') return
+        
         const gcMeta = isGroup ? await client.groupMetadata(from) : ''
         const gcName = isGroup ? gcMeta.subject : ''
         const isCmd = body.startsWith(client.config.prefix)

@@ -1,29 +1,30 @@
 const { getKryptonite } = require("../../Library/Economy");
 
 module.exports.execute = async (client, flag, arg, M) => {
-    const userId = M.sender;
-    const balance = await getKryptonite(userId);
+    try {
+        const userId = M.sender;
+        const balance = await getKryptonite(userId);
 
-    await client.sendMessage(
-        M.from,
-        {
-            text: `*Your Kryptonite Wallet*\n\n*Balance:* ${balance} Kryptonite`,
-            contextInfo: {
-                externalAdReply: {
-                    title: "Krypton Economy",
-                    body: "Your current Kryptonite balance.",
-                    thumbnailUrl: "https://raw.githubusercontent.com/HIROITADORI72/krypton-WhatsappBot/main/assets/kryptonite_currency.png",
-                    sourceUrl: "",
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: true,
+        return M.reply(
+            `*Your Kryptonite Wallet*\n\n*Balance:* ${balance} Kryptonite`,
+            {
+                contextInfo: {
+                    externalAdReply: {
+                        title: "Krypton Economy",
+                        body: "Your current Kryptonite balance.",
+                        thumbnailUrl: "https://raw.githubusercontent.com/HIROITADORI72/krypton-WhatsappBot/main/assets/kryptonite_currency.png",
+                        sourceUrl: "",
+                        mediaType: 1,
+                        renderLargerThumbnail: true,
+                        showAdAttribution: true,
+                    },
                 },
-            },
-        },
-        {
-            quoted: M,
-        }
-    );
+            }
+        );
+    } catch (error) {
+        console.error('Wallet command error:', error);
+        return M.reply('❌ *An error occurred while fetching your wallet*');
+    }
 };
 
 module.exports.command = {
