@@ -4,6 +4,7 @@ const {
     useMultiFileAuthState,
     fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys')
+const { useMongoAuthState } = require('./Library/MongoAuthState')
 const { QuickDB } = require('quick.db')
 const { getConfig } = require('./getConfig')
 const { MongoDriver } = require('quickmongo')
@@ -32,7 +33,8 @@ const driver = new MongoDriver(process.env.URL)
  */
 const start = async () => {
     try {
-        const { state, saveCreds } = await useMultiFileAuthState('session')
+        // Use MongoDB for session persistence to avoid re-authentication after updates
+        const { state, saveCreds } = await useMongoAuthState(process.env.URL)
 
         const client = Baileys({
             version: (await fetchLatestBaileysVersion()).version,
@@ -150,10 +152,10 @@ const start = async () => {
             if (connection === 'close') {
                 const { statusCode } = new Boom(lastDisconnect?.error).output
 
-                // Logged out - clear session and restart
+                // Logged out - session is now in MongoDB, so just reconnect
                 if (statusCode === DisconnectReason.loggedOut) {
-                    client.log('Logged out. Clearing session...', 'red')
-                    await remove('session')
+                    client.log('Logged out. Attempting to reconnect...', 'yellow')
+                    // Don't clear session since it's stored in MongoDB
                     setTimeout(() => start(), baseReconnectDelay)
                 }
                 // Restart required - reconnect immediately
